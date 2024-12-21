@@ -67,6 +67,12 @@ pub fn three_to_canvas(v: &Vertex, width: usize, height: usize) -> (i32, i32) {
 }
 
 /// Draws a 2D triangle onto the screen
+///
+/// Bubblesorts triangle coordinates and plots them on screen
+///
+/// Interpolates values between triangle edges to fill in the shape using line()
+///
+/// This function panics if 0 integer division is possible
 pub fn triangle(
     mut v0: (i32, i32),
     mut v1: (i32, i32),
@@ -78,59 +84,59 @@ pub fn triangle(
 ) {
     // Bubblesort coordinates by y-axis (ascending)
     if v0.1 > v1.1 {
-        (v0, v1) = (v1, v0);
+        std::mem::swap(&mut v0, &mut v1);
     }
     if v0.1 > v2.1 {
-        (v0, v2) = (v2, v0);
+        std::mem::swap(&mut v0, &mut v2);
     }
     if v1.1 > v2.1 {
-        (v1, v2) = (v2, v1)
+        std::mem::swap(&mut v1, &mut v2);
     }
 
-    // Total height of bottom half
+    // Total height of triangle
     let total_height = v2.1 - v0.1;
 
-    // Draw bottom half
-    for y in v0.1..=v1.1 {
-        let segment_height = v1.1 - v0.1;
-        if segment_height <= 0 {
-            panic!(
-                "Segment height cannot be less than 0. v1.y = {}, v0.y = {}",
-                v1.1, v0.1
-            );
+    // Draw triangle
+    for y in v0.1..=v2.1 {
+        // Determine which half we are in. (v0, v1) is bottom half. Top half is (v1, v2).
+        let second_half = y > v1.1 || v1.1 == v0.1;
+        // Segment height for the current half
+        let segment_height = if second_half {
+            v2.1 - v1.1
+        } else {
+            v1.1 - v0.1
+        };
+
+        if segment_height == 0 {
+            panic!("ERROR: Segment height is 0 which results in division by 0\nWhile drawing triangle\nv0({}, {}) v1({}, {}) v2({}, {})", v0.0, v0.1, v1.0, v1.1, v2.0, v2.1);
+            // Prevent division by zero
         }
+
+        // These factors enable liner interpolation to calculate endpoints of current line
+        // Determines horizontal pos of point on line that connects to top v0 and bottom v2 vertices 
         let alpha = (y - v0.1) as f32 / total_height as f32;
-        let beta = (y - v0.1) as f32 / segment_height as f32;
+        // Determines horizontal pos of point on line that connects curr half (v0 -> v1) or (v1 -> v2)
+        let beta = if second_half {
+            (y - v1.1) as f32 / segment_height as f32
+        } else {
+            (y - v0.1) as f32 / segment_height as f32
+        };
 
-        let mut a = (v0.0 + ((v2.0 - v0.0) as f32 * alpha) as i32, y);
-        let mut b = (v0.0 + ((v1.0 - v0.0) as f32 * beta) as i32, y);
+        // Point on line connecting top (v0) and bottom (v2) vertices for curr y
+        let mut a = ((v0.0 as f32 + (v2.0 - v0.0) as f32 * alpha) as i32, y);
+        // Point on line connecting vertices of curr half for curr y
+        let mut b = if second_half {
+            ((v1.0 as f32 + (v2.0 - v1.0) as f32 * beta) as i32, y)
+        } else {
+            ((v0.0 as f32 + (v1.0 - v0.0) as f32 * beta) as i32, y)
+        };
 
+        // Keep a on left
         if a.0 > b.0 {
-            (a.0, a.1, b.0, b.1) = (b.0, b.1, a.0, a.1);
+            std::mem::swap(&mut a, &mut b);
         }
 
-        crate::line(a.0, a.1, b.0, b.1, canvas, width, height, color);
-    }
-
-    // Draw top half
-    for y in v1.1..=v2.1 {
-        let segment_height = v2.1 - v1.1;
-        if segment_height <= 0 {
-            panic!(
-                "Segment height cannot be less than 0. v2.y = {}, v1.y = {}",
-                v2.1, v1.1
-            );
-        }
-        let alpha = (y - v0.1) as f32 / total_height as f32;
-        let beta = (y - v1.1) as f32 / segment_height as f32;
-
-        let mut a = (v0.0 + ((v2.0 - v0.0) as f32 * alpha) as i32, y);
-        let mut b = (v1.0 + ((v2.0 - v1.0) as f32 * beta) as i32, y);
-
-        if a.0 > b.0 {
-            (a.0, a.1, b.0, b.1) = (b.0, b.1, a.0, a.1);
-        }
-
+        // Draw horizontal line using crate::line
         crate::line(a.0, a.1, b.0, b.1, canvas, width, height, color);
     }
 }
